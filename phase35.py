@@ -132,10 +132,8 @@ def style_and_download(df_export, label, filename, sheet_name="Sheet1"):
         dark_green  = PatternFill("solid", fgColor="006100")
         for idx, cell in enumerate(ws[1], start=1):
             cell.font = Font(bold=True, color="000000")
-            if idx <= cols.index("Website")+1:
-                cell.fill = light_green
-            else:
-                cell.fill = dark_green
+            cell.fill = light_green if idx <= cols.index("Website")+1 else dark_green
+            if idx > cols.index("Website")+1:
                 cell.font = Font(bold=True, color="FFFFFF")
             cell.alignment = Alignment(horizontal="center")
 
@@ -167,11 +165,9 @@ def style_and_download(df_export, label, filename, sheet_name="Sheet1"):
             max_len = max(len(str(c.value)) if c.value else 0 for c in col_cells)
             ws.column_dimensions[get_column_letter(col_cells[0].column)].width = max_len + 2
 
-        # no writer.save() needed with pandas >= 1.4
     buf.seek(0)
     st.download_button(label, buf, filename,
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 
 # --------------------------------------
 # Search Form
@@ -190,19 +186,16 @@ if not ss.search_done:
             ss.overall_budget = ob
             ss.page           = 1
             ss.prev_sel       = []
-            
-            # Modified eligibility logic:
+
             def compute(r):
                 cl = r['CLOSING_RANK_2023']
                 tf, gt = r['TUITION_FEE'], r['GRAND_TOTAL']
-                # If the closing rank is missing or the user's rank is worse than the closing rank, it's not possible.
                 if pd.isna(cl) or (ur > cl):
                     return "NOT POSSIBLE"
-                # Check if tuition fee or overall cost exceeds the budget.
                 if (pd.notna(tf) and tf > tb) or (pd.notna(gt) and gt > ob):
                     return "Budget Exceeding"
                 return "Within budget"
-            
+
             df['Budget Status'] = df.apply(compute, axis=1)
             ss.possible_colleges = df[df['Budget Status'].isin(["Within budget", "Budget Exceeding"])].reset_index(drop=True)
     st.stop()
@@ -213,14 +206,14 @@ possible_colleges = ss.possible_colleges
 # Modify Search
 # --------------------------------------
 if st.button("Modify Search"):
-    ss.search_done    = False
-    ss.selected_idx   = None
+    ss.search_done      = False
+    ss.selected_idx     = None
     ss.selected_colleges.clear()
     for k in list(st.session_state):
         if k.startswith("select_"):
             del st.session_state[k]
     ss.page = 1
-    st.rerun()
+    st.experimental_rerun()
 
 # --------------------------------------
 # State Filter
@@ -272,14 +265,14 @@ compare_choices = st.multiselect(
     "🔍 Compare two colleges:",
     options=possible_colleges["COLLEGE"],
     default=st.session_state.get("compare_sel", []),
-    help="Select exactly two colleges to see their stats side‑by‑side"
+    help="Select exactly two colleges to see their stats side-by-side"
 )
-st.session_state["compare_sel"] = compare_choices
+# Limit and persist to 2 selections
+sel2 = compare_choices[:2]
+st.session_state["compare_sel"] = sel2
 
-if len(compare_choices) == 2:
-    # Filter the data for the selected colleges and remove duplicate entries
-    comp_df = possible_colleges[possible_colleges["COLLEGE"].isin(compare_choices)]
-    comp_df = comp_df.drop_duplicates(subset=["COLLEGE"])
+if len(sel2) == 2:
+    comp_df = possible_colleges[possible_colleges["COLLEGE"].isin(sel2)].drop_duplicates(subset=["COLLEGE"])
     comp_df = comp_df[[
         "COLLEGE", "UNIVERSITY_NAME", "STATE",
         "TUITION_FEE", "HOSTEL_CHARGES_PA", "ANNUAL",
@@ -293,25 +286,15 @@ if len(compare_choices) == 2:
     }).set_index("College").T
     st.markdown("#### Comparison")
     st.dataframe(comp_df)
-elif len(compare_choices) > 2:
+elif len(sel2) > 2:
     st.warning("Please select only **two** colleges for comparison.")
 
 # --------------------------------------
-# Persist selections via unified list
+# Selections & Download UI
 # --------------------------------------
 st.markdown(f"**Selected: {len(ss.selected_colleges)}**")
-
-# --------------------------------------
-# Client name prompt
-# --------------------------------------
 client_name = st.text_input("Enter client name (for sheet)")
 
-# --------------------------------------
-# Download Selected (PDF)
-# --------------------------------------
-# --------------------------------------
-# Download Selected (Excel only)
-# --------------------------------------
 if ss.selected_colleges:
     df_sel = possible_colleges[possible_colleges['COLLEGE'].isin(ss.selected_colleges)].copy()
     export_sel = df_sel[[
@@ -407,15 +390,12 @@ for i, row in page_data.iterrows():
         st.markdown(f"**{row['COLLEGE'].split(',')[0]}**")
         st.markdown(f"*{row['UNIVERSITY_NAME']}*")
         line = f"Tuition: {format_inr(row['TUITION_FEE'])}"
-        if pd.notna(row.get('STATE')):
-            line += f" | State: {row['STATE']}"
-        if pd.notna(row.get('CLOSING_RANK_2023')):
-            line += f" | Closing: {int(row['CLOSING_RANK_2023'])}"
+        if pd.notna(row.get('STATE')): line += f" | State: {row['STATE']}"
+        if pd.notna(row.get('CLOSING_RANK_2023')): line += f" | Closing: {int(row['CLOSING_RANK_2023'])}"
         line += f" | Budget: {row['Budget Status']}"
         st.markdown(f"<div class='card-footer'>{line}</div>", unsafe_allow_html=True)
         st.markdown("</div></div>", unsafe_allow_html=True)
 
-        # Persistent checkbox logic for selection
         slug = slugify(row['COLLEGE'])
         checked = st.checkbox("Select", value=(row['COLLEGE'] in ss.selected_colleges), key=f"select_{slug}")
         if checked and row['COLLEGE'] not in ss.selected_colleges:
@@ -430,9 +410,6 @@ for i, row in page_data.iterrows():
 # --------------------------------------
 # Pagination controls
 # --------------------------------------
-# --------------------------------------
-# Pagination controls
-# --------------------------------------
 c1, c2, c3 = st.columns([1, 2, 1])
 with c1:
     if st.button("⬅ Previous Page") and ss.page > 1:
@@ -441,7 +418,4 @@ with c3:
     if st.button("Next Page ➡") and ss.page < num_pages:
         paginate("next")
 with c2:
-    st.markdown(
-        f"<p style='text-align:center;'>Page {ss.page} of {num_pages}</p>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<p style='text-align:center;'>Page {ss.page} of {num_pages}</p>", unsafe_allow_html=True)
