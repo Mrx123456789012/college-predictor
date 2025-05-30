@@ -4,6 +4,7 @@ import io
 import pandas as pd
 import streamlit as st
 from PIL import Image
+
 # --------------------------------------
 # Page config and CSS
 # --------------------------------------
@@ -76,7 +77,6 @@ def load_and_resize(path, size):
 @st.cache_data
 def load_data(path):
     df = pd.read_csv(path)
-    # Clean up column names
     df.columns = (
         df.columns.astype(str)
           .str.replace(r'"','', regex=True)
@@ -89,7 +89,6 @@ def load_data(path):
         'UNIVESITY_NAME': 'UNIVERSITY_NAME',
         'HOSTEL_CHARGES_P.A.': 'HOSTEL_CHARGES_PA'
     })
-    # Clean up numeric columns
     for col in ['TUITION_FEE', 'GRAND_TOTAL', 'OPENING_RANK_2023', 'CLOSING_RANK_2023']:
         if col in df:
             df[col] = df[col].astype(str).str.replace(r'[₹,]', '', regex=True).str.strip()
@@ -127,7 +126,6 @@ def style_and_download(df_export, label, filename, sheet_name="Sheet1"):
         ws  = wb[sheet_name]
         cols = df_export.columns.tolist()
 
-        # 1) Header styling
         light_green = PatternFill("solid", fgColor="C6EFCE")
         dark_green  = PatternFill("solid", fgColor="006100")
         for idx, cell in enumerate(ws[1], start=1):
@@ -137,14 +135,12 @@ def style_and_download(df_export, label, filename, sheet_name="Sheet1"):
                 cell.font = Font(bold=True, color="FFFFFF")
             cell.alignment = Alignment(horizontal="center")
 
-        # 2) Alternate row coloring
         alt = PatternFill("solid", fgColor="F2F2F2")
         for r in range(2, ws.max_row+1):
             if r % 2 == 0:
                 for c in range(1, ws.max_column+1):
                     ws.cell(r,c).fill = alt
 
-        # 3) Budget Status coloring
         bs_col = cols.index("Budget Status") + 1
         red    = PatternFill("solid", fgColor="FFC7CE")
         green  = PatternFill("solid", fgColor="C6EFCE")
@@ -152,7 +148,6 @@ def style_and_download(df_export, label, filename, sheet_name="Sheet1"):
             cell = ws.cell(r, bs_col)
             cell.fill = red if cell.value == "Budget Exceeding" else green
 
-        # 4) Rupee formatting
         rupee_fmt = u'₹#,##0'
         for fee_col in ["Tuition fee", "Grand Total"]:
             if fee_col in cols:
@@ -160,7 +155,6 @@ def style_and_download(df_export, label, filename, sheet_name="Sheet1"):
                 for r in range(2, ws.max_row+1):
                     ws.cell(r, ci).number_format = rupee_fmt
 
-        # 5) Auto-width
         for col_cells in ws.columns:
             max_len = max(len(str(c.value)) if c.value else 0 for c in col_cells)
             ws.column_dimensions[get_column_letter(col_cells[0].column)].width = max_len + 2
@@ -209,11 +203,11 @@ if st.button("Modify Search"):
     ss.search_done      = False
     ss.selected_idx     = None
     ss.selected_colleges.clear()
-    for k in list(st.session_state):
-        if k.startswith("select_"):
-            del st.session_state[k]
+    for key in list(st.session_state):
+        if key.startswith("select_"):
+            del st.session_state[key]
     ss.page = 1
-    st.experimental_rerun()
+    st.rerun()
 
 # --------------------------------------
 # State Filter
@@ -267,7 +261,6 @@ compare_choices = st.multiselect(
     default=st.session_state.get("compare_sel", []),
     help="Select exactly two colleges to see their stats side-by-side"
 )
-# Limit and persist to 2 selections
 sel2 = compare_choices[:2]
 st.session_state["compare_sel"] = sel2
 
@@ -327,11 +320,11 @@ c1, c2 = st.columns(2)
 with c1:
     if st.button("🗑️ Clear Selections"):
         ss.selected_colleges.clear()
-        for k in list(st.session_state):
-            if k.startswith("select_"):
-                del st.session_state[k]
+        for key in list(st.session_state):
+            if key.startswith("select_"):
+                del st.session_state[key]
         ss.page = 1
-        st.experimental_rerun()
+        st.rerun()
 with c2:
     export_all = results[[
         "COLLEGE", "UNIVERSITY_NAME", "STATE", "SEATS", "OVERVIEW", "WEBSITE",
@@ -372,7 +365,7 @@ if ss.selected_idx is not None and ss.selected_idx < len(results):
         st.markdown(f"[Visit Website]({row['WEBSITE']})")
     if st.button("← Back to Results"):
         ss.selected_idx = None
-        st.experimental_rerun()
+        st.rerun()
 
 # --------------------------------------
 # Grid of cards
@@ -390,8 +383,10 @@ for i, row in page_data.iterrows():
         st.markdown(f"**{row['COLLEGE'].split(',')[0]}**")
         st.markdown(f"*{row['UNIVERSITY_NAME']}*")
         line = f"Tuition: {format_inr(row['TUITION_FEE'])}"
-        if pd.notna(row.get('STATE')): line += f" | State: {row['STATE']}"
-        if pd.notna(row.get('CLOSING_RANK_2023')): line += f" | Closing: {int(row['CLOSING_RANK_2023'])}"
+        if pd.notna(row.get('STATE')):
+            line += f" | State: {row['STATE']}"
+        if pd.notna(row.get('CLOSING_RANK_2023')):
+            line += f" | Closing: {int(row['CLOSING_RANK_2023'])}"
         line += f" | Budget: {row['Budget Status']}"
         st.markdown(f"<div class='card-footer'>{line}</div>", unsafe_allow_html=True)
         st.markdown("</div></div>", unsafe_allow_html=True)
@@ -405,7 +400,7 @@ for i, row in page_data.iterrows():
 
         if st.button("View Details", key=f"view_{idx}"):
             ss.selected_idx = idx
-            st.experimental_rerun()
+            st.rerun()
 
 # --------------------------------------
 # Pagination controls
