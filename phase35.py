@@ -425,7 +425,7 @@ for i, row in page_data.iterrows():
 
         if st.button("View Details", key=f"view_{idx}"):
             ss.selected_idx = idx
-            st.rerun()
+            st.experimental_rerun()
 
 # --------------------------------------
 # Pagination controls
